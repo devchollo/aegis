@@ -31,6 +31,10 @@ export interface RuntimeMessageMap {
     request: { type: "vault.lock" };
     response: VaultStatus;
   };
+  "vault.resetLocalVault": {
+    request: { type: "vault.resetLocalVault" };
+    response: VaultStatus;
+  };
   "vault.reauthenticate": {
     request: { type: "vault.reauthenticate"; payload: { masterPassword: string } };
     response: VaultStatus;
@@ -222,6 +226,7 @@ export function isRuntimeMessage(value: unknown): value is RuntimeMessage {
   switch (value.type) {
     case "vault.getStatus":
     case "vault.lock":
+    case "vault.resetLocalVault":
     case "vault.getPopupData":
     case "vault.listCredentials":
     case "vault.listNotes":

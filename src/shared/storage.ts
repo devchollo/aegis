@@ -58,6 +58,10 @@ export async function readSyncState(): Promise<SyncState> {
     serverUrl: typeof state.serverUrl === "string" ? state.serverUrl : undefined,
     username: typeof state.username === "string" ? state.username : undefined,
     authToken: typeof state.authToken === "string" ? state.authToken : undefined,
+    vaultOwnerServerUrl:
+      typeof state.vaultOwnerServerUrl === "string" ? state.vaultOwnerServerUrl : undefined,
+    vaultOwnerUsername:
+      typeof state.vaultOwnerUsername === "string" ? state.vaultOwnerUsername : undefined,
     lastSyncedAt: typeof state.lastSyncedAt === "number" ? state.lastSyncedAt : undefined,
     lastLocalChangeAt:
       typeof state.lastLocalChangeAt === "number" ? state.lastLocalChangeAt : undefined,

@@ -141,6 +141,8 @@ export type SyncState = {
   serverUrl?: string;
   username?: string;
   authToken?: string;
+  vaultOwnerServerUrl?: string;
+  vaultOwnerUsername?: string;
   lastSyncedAt?: number;
   lastLocalChangeAt?: number;
   lastRemoteCheckAt?: number;

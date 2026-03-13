@@ -26,6 +26,7 @@ type AuthCardProps = {
   syncAuthError?: string | null;
   defaultSyncServerUrl?: string;
   onSyncAuth?: (payload: SyncCredentialsInput) => Promise<void>;
+  onStartFreshLocalVault?: () => Promise<void>;
   onSubmit: (password: string) => Promise<void>;
 };
 
@@ -40,6 +41,7 @@ export function AuthCard({
   syncAuthError = null,
   defaultSyncServerUrl,
   onSyncAuth,
+  onStartFreshLocalVault,
   onSubmit
 }: AuthCardProps) {
   const [password, setPassword] = useState("");
@@ -69,6 +71,8 @@ export function AuthCard({
     mode === "setup"
       ? "Sign in to Aegis Sync on this device, then unlock the downloaded vault with your master password."
       : "Sign in to Aegis Sync before unlocking if this browser has not pulled your latest encrypted vault yet.";
+  const showFreshLocalVaultAction =
+    mode === "unlock" && !defaultSyncServerUrl && Boolean(onStartFreshLocalVault);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -203,6 +207,28 @@ export function AuthCard({
             <Button type="submit" className="w-full" disabled={busy}>
               {busy ? "Working..." : mode === "setup" ? "Create Aegis" : "Unlock Aegis"}
             </Button>
+
+            {showFreshLocalVaultAction ? (
+              <div className="space-y-3 rounded-2xl border border-border bg-secondary/50 p-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">
+                    Need a brand-new local vault on this device?
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Reset the local device state and return to first-run setup. This does not delete anything on a sync server.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={busy}
+                  onClick={() => void onStartFreshLocalVault?.()}
+                >
+                  Create local vault instead
+                </Button>
+              </div>
+            ) : null}
           </form>
         </CardContent>
       </Card>

@@ -1,109 +1,132 @@
-# Aegis Chrome Extension
+# Aegis
 
-Aegis is a Manifest V3 Chrome extension built with React, TypeScript, Vite, Tailwind CSS, shadcn-style UI components, and the Web Crypto API. It stores credentials and secure notes locally in `chrome.storage.local` and encrypts secrets with a key derived from a master password via PBKDF2.
+Aegis is a Chrome Extension password vault built on Manifest V3. It stores website credentials and secure notes locally, encrypts secrets with a master-password-derived key, and optionally syncs the already-encrypted vault to your own backend.
 
-## Features
+This repo includes:
 
-- Master password setup and unlock flow
-- AES-GCM encryption for stored passwords and note bodies
-- Local-only storage with `chrome.storage.local`
-- Optional Aegis Sync account backed by a Render-deployable Node service
-- Popup for current-site matching, quick save, quick notes, autofill, and captured-login review
-- Options dashboard for full credential, note, and security management
-- Configurable auto-lock timeout
-- Re-authentication flow for reveals and plaintext export/import
-- Explicit user-initiated autofill with DOM event dispatching for controlled inputs
-- Plaintext Aegis export after password confirmation, plus import that re-encrypts with the current master password
-- Cross-device sync uploads the already-encrypted vault blob, not decrypted secrets
+- the Chrome extension
+- the optional `sync-server` backend
+- a local-only workflow with no backend required
+
+## What Aegis Does
+
+- Stores credentials for websites
+- Detects login forms and offers save/fill prompts
+- Autofills matching credentials only on approved sites
+- Stores secure notes with encrypted bodies
+- Locks and unlocks with a master password
+- Supports optional cross-device sync through your own server
+- Exports plaintext backups only after re-authentication
+
+## Security Model
+
+Aegis is designed so the extension, not the backend, is the trust boundary for secrets.
+
+- Master passwords are never stored directly.
+- PBKDF2 with a random salt derives the local AES-GCM key.
+- Password values and note bodies are encrypted individually before persistence.
+- Encrypted data is stored in `chrome.storage.local`.
+- Session key material is kept in memory and `chrome.storage.session`, not plaintext disk storage.
+- Sync uploads the encrypted vault state blob, not decrypted passwords or note bodies.
+- Autofill is explicit and origin-aware by default.
+- Export requires a fresh password check and produces plaintext data by design.
+
+Important:
+
+- The sync backend authenticates users, but it does not know the Aegis master password.
+- If a user loses their master password, the encrypted vault cannot be decrypted.
+- Plaintext exports are sensitive and must be stored carefully.
+
+## Tech Stack
+
+- Chrome Extension Manifest V3
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- shadcn-style component setup
+- lucide-react
+- Web Crypto API
+- `chrome.storage.local`
+- Optional sync backend: Express + PostgreSQL
 
 ## Project Structure
 
 ```text
-vault-extension/
-|- manifest.json
-|- options.html
-|- package.json
-|- popup.html
-|- postcss.config.js
-|- README.md
-|- sync-server/
-|  |- README.md
-|  |- package.json
-|  |- schema.sql
-|  `- server.mjs
-|- tailwind.config.ts
-|- tsconfig.json
-|- tsconfig.node.json
-|- vite.config.ts
-`- src/
-   |- background/
-   |  `- index.ts
-   |- components/
-   |  |- auth-card.tsx
-   |  |- credential-dialog.tsx
-   |  |- empty-state.tsx
-   |  |- note-dialog.tsx
-   |  |- reauth-dialog.tsx
-   |  `- ui/
-   |     |- alert.tsx
-   |     |- badge.tsx
-   |     |- button.tsx
-   |     |- card.tsx
-   |     |- dialog.tsx
-   |     |- input.tsx
-   |     |- label.tsx
-   |     |- scroll-area.tsx
-   |     |- separator.tsx
-   |     |- switch.tsx
-   |     |- tabs.tsx
-   |     `- textarea.tsx
-   |- content/
-   |  `- index.ts
-   |- lib/
-   |  |- password.ts
-   |  `- utils.ts
-   |- options/
-   |  |- App.tsx
-   |  `- main.tsx
-   |- popup/
-   |  |- App.tsx
-   |  `- main.tsx
-   |- shared/
-   |  |- constants.ts
-   |  |- crypto.ts
-   |  |- match.ts
-   |  |- messaging.ts
-   |  |- storage.ts
-   |  |- types.ts
-   |  `- validators.ts
-   |- styles/
-   |  `- globals.css
-   `- vite-env.d.ts
+.
+├─ manifest.json
+├─ popup.html
+├─ options.html
+├─ package.json
+├─ vite.config.ts
+├─ tailwind.config.ts
+├─ postcss.config.js
+├─ src/
+│  ├─ background/
+│  ├─ content/
+│  ├─ popup/
+│  ├─ options/
+│  ├─ components/
+│  ├─ shared/
+│  ├─ lib/
+│  └─ styles/
+└─ sync-server/
+   ├─ server.mjs
+   ├─ package.json
+   ├─ schema.sql
+   ├─ .env.example
+   └─ README.md
 ```
 
-## Setup
+## Quick Start
 
-1. Install dependencies:
+### 1. Install extension dependencies
 
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+```
 
-2. Build the extension:
+### 2. Build the extension
 
-   ```bash
-   npm run build
-   ```
+```bash
+npm run build
+```
 
-3. Load it in Chrome:
-   - Open `chrome://extensions`
-   - Enable Developer Mode
-   - Click `Load unpacked`
-   - Select the generated `dist` folder
+### 3. Load the extension in Chrome
 
-## Optional Sync Backend
+1. Open `chrome://extensions`
+2. Enable `Developer mode`
+3. Click `Load unpacked`
+4. Select the repo `dist` folder
 
-Run the included sync server locally:
+Always load `dist`, not the repo root.
+
+## Local-Only Usage
+
+You do not need a backend to use Aegis.
+
+1. Build and load the extension
+2. Open the popup
+3. Create a local master password
+4. Save credentials and notes locally
+
+In local-only mode:
+
+- everything remains on that browser profile
+- no data leaves the machine
+- sync UI can be ignored entirely
+
+## Self-Hosted Sync
+
+The optional sync backend lets you use the same encrypted vault across devices. The backend stores:
+
+- sync account records
+- session tokens
+- the encrypted vault blob
+
+The backend does not store decrypted secrets unless you export plaintext data yourself outside the extension.
+
+### Run the backend locally
 
 ```bash
 cd sync-server
@@ -111,64 +134,226 @@ npm install
 npm run dev
 ```
 
-Then use `http://localhost:3000` as the sync server URL inside Aegis.
+Set up PostgreSQL first, then configure `DATABASE_URL`.
 
-For manual Render deployment without Blueprints:
+Use:
 
-- create a Render PostgreSQL instance
-- create a normal Render Web Service
-- set the web service root directory to `sync-server`
-- set `DATABASE_URL` from the Render Postgres instance
-- follow the full guide in [sync-server/README.md](./sync-server/README.md)
+- `http://localhost:3000` as the server URL inside Aegis
+
+### Backend environment
+
+See [sync-server/.env.example](/c:/Users/devch/Desktop/vault-extension/sync-server/.env.example).
+
+Key variables:
+
+- `DATABASE_URL`
+- `PGSSL`
+- `AEGIS_SESSION_TTL_MS`
+- `AEGIS_KEEPALIVE_ENABLED`
+- `AEGIS_KEEPALIVE_INTERVAL_MS`
+- `AEGIS_KEEPALIVE_URL`
+
+### Deploy your own sync server
+
+The recommended public setup in this repo is:
+
+- Express app
+- PostgreSQL database
+- Render web service or any Node host
+
+For detailed backend deployment steps, read [sync-server/README.md](/c:/Users/devch/Desktop/vault-extension/sync-server/README.md).
+
+## How Sync Works
+
+1. User signs in or creates a sync account against a chosen server URL.
+2. Aegis authenticates with the backend and receives a session token.
+3. Local vault changes upload the encrypted `VaultState` blob.
+4. Other devices can sign in to the same sync account and download the encrypted vault.
+5. The user still needs the correct Aegis master password to unlock and decrypt it.
+
+Important sync behavior:
+
+- Sync identity is scoped by `serverUrl + username`.
+- A different username must not see another user’s local vault.
+- If sync is disconnected on one device, local-only use can continue.
+- Sync polling is throttled and metadata-first to avoid noisy full downloads.
+
+## Extension Architecture
+
+### Popup
+
+The popup is the compact day-to-day UI. It shows:
+
+- lock state
+- current site match status
+- matching credentials
+- fill actions
+- quick save credential
+- quick note creation
+- captured login review
+
+### Options Dashboard
+
+The dashboard is the full management UI. It provides:
+
+- credential management
+- secure notes management
+- search and filtering
+- security settings
+- sync controls
+- export and import
+
+### Background Service Worker
+
+The background worker is the sensitive core. It:
+
+- verifies and unlocks the vault
+- derives and restores session keys
+- encrypts and decrypts secrets
+- reads and writes storage
+- enforces re-authentication rules
+- mediates sync operations
+- prevents broad plaintext exposure
+
+### Content Script
+
+The content script:
+
+- detects likely login forms
+- reads draft username/password fields
+- captures submitted logins
+- receives explicit fill requests
+- dispatches input/change events for modern frontends
+
+## Messaging Flow
+
+Communication is explicit and typed.
+
+- Popup and options pages talk to the background via `chrome.runtime.sendMessage`.
+- The background talks to the content script with targeted tab messages.
+- The content script never gets full vault state.
+- Decrypted credentials are sent to the page only during explicit autofill.
+
+Typical flow:
+
+1. Content script detects a login form.
+2. Popup asks background for current site state.
+3. Background checks matching credentials.
+4. User clicks `Fill`.
+5. Background decrypts only that credential.
+6. Content script fills the page inputs and dispatches DOM events.
 
 ## Development
 
-Use build watch mode while editing:
+### Watch mode
 
 ```bash
 npm run dev
 ```
 
-Then reload the extension in `chrome://extensions` after changes.
+This rebuilds the extension on changes. Chrome still needs an extension reload.
 
-## How Components Communicate
+### Type check
 
-- Popup and options pages send typed `chrome.runtime.sendMessage` requests to the background service worker.
-- The background service worker is the security boundary:
-  - derives keys
-  - verifies the master password
-  - encrypts and decrypts secrets
-  - reads and writes `chrome.storage.local`
-  - enforces lock state and re-authentication requirements
-- When sync is enabled, the background worker also uploads the encrypted `VaultState` blob to the sync backend after local mutations.
-- On a new device, signing in to an Aegis Sync account can download the encrypted vault before unlock, after which the user unlocks with the same master password.
-- The background worker sends targeted messages to the content script only for:
-  - login-form detection
-  - explicit fill requests initiated by the user
-- The content script never persists secrets and only receives decrypted username/password values during a fill action.
-- After a detected login submission, the content script can send a one-time in-memory capture to the background worker so the popup can offer a prefilled save flow.
+```bash
+npm run typecheck
+```
 
-## Build Notes
+### Production build
 
-- Vite builds the React popup and options pages.
-- A small Vite plugin runs esbuild for the MV3 background service worker and content script so the manifest gets stable filenames (`background.js` and `content.js`).
-- `manifest.json` is copied into `dist` during the build.
+```bash
+npm run build
+```
 
-## Security Notes
+### Run backend from the root repo
 
-- Master passwords are never stored directly.
-- Aegis derives an AES-GCM key from the master password using PBKDF2 with a random salt.
-- Password values and note bodies are encrypted individually with unique IVs.
-- Decrypted secrets stay in memory only inside the background service worker session.
-- Export files contain plaintext credentials and note bodies after re-authentication. They do not include the plaintext master password.
-- Aegis Sync stores only the encrypted vault state plus sync account metadata; the backend never receives the master password.
-- Auto-lock is enforced from session metadata and background memory is cleared on worker suspend.
-- Origin matching is the default and safer site matching mode.
-- Autofill is explicit and blocked on non-matching domains.
+```bash
+npm run sync:server
+```
 
-## Limitations
+## Using Sync Across Devices
 
-- Session state survives normal MV3 worker unloads through `chrome.storage.session`, but still resets on browser restart, extension reload, or manual lock.
-- Imported vaults replace the current vault wholesale and are re-encrypted with the currently unlocked master password.
-- Notes encrypt the body, not the title, so note titles should avoid highly sensitive plaintext.
-- The included sync backend is intentionally simple. For production use at scale, move account/session storage from the local JSON file to a managed database.
+1. On device A, create or unlock your vault.
+2. Connect a sync account and enable sync.
+3. On device B, open Aegis and sign in to the same sync account.
+4. Let Aegis download the encrypted vault.
+5. Unlock with the same Aegis master password used for that vault.
+
+The sync account password and the Aegis master password may be the same or different, but they are not the same system:
+
+- sync account password authenticates with the backend
+- master password decrypts the vault locally
+
+## Backup and Recovery
+
+### Export
+
+- Export requires re-authentication
+- Exported JSON contains plaintext credentials and note bodies
+- Export files should be treated like raw secrets
+
+### Import
+
+- Import replaces the current vault contents
+- Imported plaintext data is immediately re-encrypted with the current unlocked master password
+
+## Known Limitations
+
+- Note titles remain plaintext; only note bodies are encrypted.
+- Chrome MV3 worker lifecycle can still end an active session after reload/restart or manual lock.
+- Import is full replacement, not merge.
+- The sync backend is intentionally minimal and does not yet support multi-factor auth, audit logs, or advanced conflict resolution.
+- Polling is throttled, but sync is not real-time websocket replication.
+
+## Privacy Notes
+
+- Aegis does not require any cloud service for local use.
+- If you enable sync, you are responsible for your chosen backend and database.
+- This repo is suitable for self-hosting, local experimentation, and personal deployment.
+
+## Troubleshooting
+
+### The extension changes are not showing up
+
+- Rebuild with `npm run build`
+- Reload the unpacked extension
+- Make sure Chrome is loading `dist`
+
+### Sync login works but vault data does not appear
+
+- Confirm both devices use the same sync account
+- Confirm both devices use the same Aegis master password for that vault
+- Check the backend health endpoints:
+  - `/health`
+  - `/ready`
+- Check the server URL configured inside Aegis
+
+### A page does not autofill correctly
+
+- Some sites use custom or multi-step authentication flows
+- Try opening the popup and filling explicitly
+- If the DOM is highly custom, site-specific handling may be required
+
+### Exported file is plaintext
+
+That is expected. Export is intentionally decrypted after password confirmation.
+
+## Publish and Contribute
+
+If you are making this repo public:
+
+- review permissions in `manifest.json`
+- replace development branding or screenshots as needed
+- verify your deployed sync backend URL and database security
+- document your own hosting defaults if you fork the sync server
+
+Contributions should preserve:
+
+- local-first security
+- typed message contracts
+- no plaintext secret persistence
+- explicit autofill behavior
+
+## License
+
+Add your preferred license before public release if this repository does not already include one.

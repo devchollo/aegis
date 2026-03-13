@@ -151,6 +151,31 @@ export default function App() {
     await refresh();
   }
 
+  async function handleStartFreshLocalVault() {
+    if (
+      !window.confirm(
+        "Reset this device and create a new local vault? This clears the local Aegis vault on this browser only and does not delete any server data."
+      )
+    ) {
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+
+    const response = await sendRuntimeMessage({ type: "vault.resetLocalVault" });
+
+    setBusy(false);
+
+    if (!response.ok) {
+      setError(response.error.message);
+      return;
+    }
+
+    setNotice("Local device vault cleared. Create a new local vault to continue.");
+    await refresh();
+  }
+
   async function handleSaveCredential(payload: SaveCredentialInput) {
     setBusy(true);
     setError(null);
@@ -304,6 +329,7 @@ export default function App() {
               : undefined
           }
           onSyncAuth={handleSyncAuth}
+          onStartFreshLocalVault={handleStartFreshLocalVault}
           onSubmit={(password) => handleAuth("unlock", password)}
         />
       </div>

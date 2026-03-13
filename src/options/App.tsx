@@ -503,6 +503,31 @@ export default function App() {
     await refreshStatusAndData();
   }
 
+  async function handleStartFreshLocalVault() {
+    if (
+      !window.confirm(
+        "Reset this device and create a new local vault? This clears the local Aegis vault on this browser only and does not delete any sync backend data."
+      )
+    ) {
+      return;
+    }
+
+    setBusy(true);
+    setAuthError(null);
+
+    const response = await sendRuntimeMessage({ type: "vault.resetLocalVault" });
+
+    setBusy(false);
+
+    if (!response.ok) {
+      setAuthError(response.error.message);
+      return;
+    }
+
+    setNotice("Local device vault cleared. Create a new local vault to continue.");
+    await refreshStatusAndData();
+  }
+
   async function handleExport() {
     await queueSensitiveAction(async () => {
       const response = await sendRuntimeMessage({ type: "vault.exportData" });
@@ -600,6 +625,7 @@ export default function App() {
         syncAuthError={syncAuthError}
         defaultSyncServerUrl={syncStatus?.serverUrl}
         onSyncAuth={handleSyncAuth}
+        onStartFreshLocalVault={handleStartFreshLocalVault}
         onSubmit={(password) => handleAuth("unlock", password)}
       />
     );

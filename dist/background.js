@@ -306,6 +306,7 @@ function isRuntimeMessage(value) {
   switch (value.type) {
     case "vault.getStatus":
     case "vault.lock":
+    case "vault.resetLocalVault":
     case "vault.getPopupData":
     case "vault.listCredentials":
     case "vault.listNotes":
@@ -460,6 +461,8 @@ async function readSyncState() {
     serverUrl: typeof state.serverUrl === "string" ? state.serverUrl : void 0,
     username: typeof state.username === "string" ? state.username : void 0,
     authToken: typeof state.authToken === "string" ? state.authToken : void 0,
+    vaultOwnerServerUrl: typeof state.vaultOwnerServerUrl === "string" ? state.vaultOwnerServerUrl : void 0,
+    vaultOwnerUsername: typeof state.vaultOwnerUsername === "string" ? state.vaultOwnerUsername : void 0,
     lastSyncedAt: typeof state.lastSyncedAt === "number" ? state.lastSyncedAt : void 0,
     lastLocalChangeAt: typeof state.lastLocalChangeAt === "number" ? state.lastLocalChangeAt : void 0,
     lastRemoteCheckAt: typeof state.lastRemoteCheckAt === "number" ? state.lastRemoteCheckAt : void 0,
@@ -556,7 +559,8 @@ function touchSession({ sensitive = false } = {}) {
 async function maybeSyncVaultState(state) {
   const sync = await readSyncState();
   const changedAt = Date.now();
-  if (!sync.enabled || !sync.serverUrl || !sync.authToken) {
+  const activeAccount = getSyncAccountIdentity(sync);
+  if (!sync.enabled || !sync.serverUrl || !sync.username || !sync.authToken) {
     await writeSyncState({
       ...sync,
       lastLocalChangeAt: changedAt
@@ -567,6 +571,8 @@ async function maybeSyncVaultState(state) {
     const response = await uploadRemoteVault(sync.serverUrl, sync.authToken, state);
     await writeSyncState({
       ...sync,
+      vaultOwnerServerUrl: activeAccount?.serverUrl,
+      vaultOwnerUsername: activeAccount?.username,
       lastLocalChangeAt: response.updatedAt,
       lastSyncedAt: response.updatedAt,
       lastRemoteCheckAt: Date.now(),
@@ -597,17 +603,52 @@ async function persistVaultState(state, options = {}) {
 }
 async function maybeRefreshVaultFromRemote(options = {}) {
   const sync = await readSyncState();
-  if (!sync.enabled || !sync.serverUrl || !sync.authToken) {
+  if (!sync.enabled || !sync.serverUrl || !sync.username || !sync.authToken) {
     return { refreshed: false, state: await readVaultState() };
   }
   const now = Date.now();
-  if (!options.force && sync.lastRemoteCheckAt && now - sync.lastRemoteCheckAt < REMOTE_SYNC_CHECK_INTERVAL_MS) {
-    return { refreshed: false, state: await readVaultState() };
-  }
   const localState = await readVaultState();
+  const activeAccount = getSyncAccountIdentity(sync);
+  const vaultOwner = getVaultOwnerIdentity(sync);
+  const accountMismatch = Boolean(activeAccount) && Boolean(vaultOwner) && !isSameAccountIdentity(activeAccount, vaultOwner);
+  if (!options.force && !accountMismatch && sync.lastRemoteCheckAt && now - sync.lastRemoteCheckAt < REMOTE_SYNC_CHECK_INTERVAL_MS) {
+    return { refreshed: false, state: localState };
+  }
   try {
     const remoteMeta = await fetchRemoteVaultMeta(sync.serverUrl, sync.authToken);
     const remoteUpdatedAt = remoteMeta.vault?.updatedAt;
+    if (accountMismatch) {
+      lockSession();
+      if (typeof remoteUpdatedAt === "number") {
+        const remote = await fetchRemoteVault(sync.serverUrl, sync.authToken);
+        const remoteState = isVaultState(remote.vault?.state) ? remote.vault.state : null;
+        if (remoteState) {
+          await writeVaultState(remoteState);
+          await writeSyncState({
+            ...sync,
+            vaultOwnerServerUrl: activeAccount?.serverUrl,
+            vaultOwnerUsername: activeAccount?.username,
+            lastSyncedAt: remoteUpdatedAt,
+            lastLocalChangeAt: remoteUpdatedAt,
+            lastRemoteCheckAt: now,
+            lastSyncError: void 0
+          });
+          return { refreshed: true, state: remoteState };
+        }
+      }
+      const emptyState = createEmptyVaultState({ settings: localState.settings });
+      await writeVaultState(emptyState);
+      await writeSyncState({
+        ...sync,
+        vaultOwnerServerUrl: activeAccount?.serverUrl,
+        vaultOwnerUsername: activeAccount?.username,
+        lastSyncedAt: void 0,
+        lastLocalChangeAt: void 0,
+        lastRemoteCheckAt: now,
+        lastSyncError: void 0
+      });
+      return { refreshed: true, state: emptyState };
+    }
     const hasUnsyncedLocalChanges = typeof sync.lastLocalChangeAt === "number" && typeof sync.lastSyncedAt === "number" && sync.lastLocalChangeAt > sync.lastSyncedAt;
     const shouldFetchFullRemote = typeof remoteUpdatedAt === "number" && (!localState.meta || isVaultContentEmpty(localState) || (sync.lastSyncedAt === void 0 || remoteUpdatedAt > sync.lastSyncedAt) && !hasUnsyncedLocalChanges);
     if (shouldFetchFullRemote) {
@@ -617,6 +658,8 @@ async function maybeRefreshVaultFromRemote(options = {}) {
         await writeVaultState(remoteState);
         await writeSyncState({
           ...sync,
+          vaultOwnerServerUrl: activeAccount?.serverUrl,
+          vaultOwnerUsername: activeAccount?.username,
           lastSyncedAt: remoteUpdatedAt,
           lastLocalChangeAt: remoteUpdatedAt,
           lastRemoteCheckAt: now,
@@ -669,8 +712,28 @@ function sortNotes(notes) {
 function isVaultContentEmpty(state) {
   return state.credentials.length === 0 && state.notes.length === 0;
 }
-function isSameSyncAccount(sync, next) {
-  return sync.serverUrl === next.serverUrl && sync.username === next.username;
+function getSyncAccountIdentity(sync) {
+  if (!sync.serverUrl || !sync.username) {
+    return null;
+  }
+  return {
+    serverUrl: sync.serverUrl,
+    username: sync.username
+  };
+}
+function getVaultOwnerIdentity(sync) {
+  if (!sync.vaultOwnerServerUrl || !sync.vaultOwnerUsername) {
+    return null;
+  }
+  return {
+    serverUrl: sync.vaultOwnerServerUrl,
+    username: sync.vaultOwnerUsername
+  };
+}
+function isSameAccountIdentity(left, right) {
+  return Boolean(
+    left && right && left.serverUrl === right.serverUrl && left.username === right.username
+  );
 }
 async function getCapturedCredentialForSite(site) {
   if (!site?.tabId) {
@@ -997,12 +1060,16 @@ async function connectSyncAccount(payload) {
     const remoteState = isVaultState(remote.vault?.state) ? remote.vault.state : null;
     const remoteVaultExists = Boolean(remoteState?.meta);
     let importedRemoteVault = false;
-    const switchingAccounts = Boolean(previousSync.username && previousSync.serverUrl) && !isSameSyncAccount(previousSync, { serverUrl, username });
+    const previousAccount = getVaultOwnerIdentity(previousSync) ?? getSyncAccountIdentity(previousSync);
+    const nextAccount = { serverUrl, username };
+    const switchingAccounts = Boolean(previousAccount) && !isSameAccountIdentity(previousAccount, nextAccount);
     await writeSyncState({
       enabled: payload.enableSync ?? true,
       serverUrl,
       username,
       authToken: auth.token,
+      vaultOwnerServerUrl: previousSync.vaultOwnerServerUrl,
+      vaultOwnerUsername: previousSync.vaultOwnerUsername,
       lastSyncedAt: remote.vault?.updatedAt,
       lastSyncError: void 0
     });
@@ -1015,6 +1082,8 @@ async function connectSyncAccount(payload) {
           serverUrl,
           username,
           authToken: auth.token,
+          vaultOwnerServerUrl: serverUrl,
+          vaultOwnerUsername: username,
           lastSyncedAt: remote.vault?.updatedAt,
           lastLocalChangeAt: remote.vault?.updatedAt,
           lastRemoteCheckAt: Date.now(),
@@ -1029,6 +1098,8 @@ async function connectSyncAccount(payload) {
           serverUrl,
           username,
           authToken: auth.token,
+          vaultOwnerServerUrl: serverUrl,
+          vaultOwnerUsername: username,
           lastSyncedAt: void 0,
           lastLocalChangeAt: void 0,
           lastRemoteCheckAt: Date.now(),
@@ -1042,6 +1113,8 @@ async function connectSyncAccount(payload) {
         serverUrl,
         username,
         authToken: auth.token,
+        vaultOwnerServerUrl: serverUrl,
+        vaultOwnerUsername: username,
         lastSyncedAt: remote.vault?.updatedAt,
         lastLocalChangeAt: remote.vault?.updatedAt,
         lastRemoteCheckAt: Date.now(),
@@ -1082,7 +1155,14 @@ async function setSyncEnabled(enabled) {
   return ok(toSyncStatus(await readSyncState()));
 }
 async function disconnectSyncAccount() {
-  await writeSyncState({ enabled: false });
+  const sync = await readSyncState();
+  await writeSyncState({
+    enabled: false,
+    serverUrl: sync.serverUrl,
+    username: sync.username,
+    vaultOwnerServerUrl: sync.vaultOwnerServerUrl ?? sync.serverUrl,
+    vaultOwnerUsername: sync.vaultOwnerUsername ?? sync.username
+  });
   return ok(toSyncStatus(await readSyncState()));
 }
 async function syncNow() {
@@ -1194,6 +1274,13 @@ async function reauthenticateVault(masterPassword) {
   };
   await persistSession();
   return ok(await getVaultStatus(state));
+}
+async function resetLocalVault() {
+  lockSession();
+  await writePendingLoginCaptures({});
+  await writeVaultState(createEmptyVaultState());
+  await writeSyncState({ enabled: false });
+  return ok(await getVaultStatus(await readVaultState()));
 }
 async function saveCredential(payload) {
   const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
@@ -1562,6 +1649,8 @@ async function handleRuntimeMessage(message, sender) {
         lockSession();
         return ok(await getVaultStatus());
       }
+      case "vault.resetLocalVault":
+        return resetLocalVault();
       case "vault.reauthenticate":
         return reauthenticateVault(message.payload.masterPassword);
       case "vault.getPopupData": {

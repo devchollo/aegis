@@ -175,8 +175,9 @@ function touchSession({ sensitive = false } = {}) {
 async function maybeSyncVaultState(state: VaultState) {
   const sync = await readSyncState();
   const changedAt = Date.now();
+  const activeAccount = getSyncAccountIdentity(sync);
 
-  if (!sync.enabled || !sync.serverUrl || !sync.authToken) {
+  if (!sync.enabled || !sync.serverUrl || !sync.username || !sync.authToken) {
     await writeSyncState({
       ...sync,
       lastLocalChangeAt: changedAt
@@ -189,6 +190,8 @@ async function maybeSyncVaultState(state: VaultState) {
 
     await writeSyncState({
       ...sync,
+      vaultOwnerServerUrl: activeAccount?.serverUrl,
+      vaultOwnerUsername: activeAccount?.username,
       lastLocalChangeAt: response.updatedAt,
       lastSyncedAt: response.updatedAt,
       lastRemoteCheckAt: Date.now(),
@@ -226,24 +229,67 @@ async function persistVaultState(state: VaultState, options: { sync?: boolean } 
 async function maybeRefreshVaultFromRemote(options: { force?: boolean } = {}) {
   const sync = await readSyncState();
 
-  if (!sync.enabled || !sync.serverUrl || !sync.authToken) {
+  if (!sync.enabled || !sync.serverUrl || !sync.username || !sync.authToken) {
     return { refreshed: false, state: await readVaultState() };
   }
 
   const now = Date.now();
+  const localState = await readVaultState();
+  const activeAccount = getSyncAccountIdentity(sync);
+  const vaultOwner = getVaultOwnerIdentity(sync);
+  const accountMismatch =
+    Boolean(activeAccount) &&
+    Boolean(vaultOwner) &&
+    !isSameAccountIdentity(activeAccount, vaultOwner);
+
   if (
     !options.force &&
+    !accountMismatch &&
     sync.lastRemoteCheckAt &&
     now - sync.lastRemoteCheckAt < REMOTE_SYNC_CHECK_INTERVAL_MS
   ) {
-    return { refreshed: false, state: await readVaultState() };
+    return { refreshed: false, state: localState };
   }
-
-  const localState = await readVaultState();
 
   try {
     const remoteMeta = await fetchRemoteVaultMeta(sync.serverUrl, sync.authToken);
     const remoteUpdatedAt = remoteMeta.vault?.updatedAt;
+
+    if (accountMismatch) {
+      lockSession();
+
+      if (typeof remoteUpdatedAt === "number") {
+        const remote = await fetchRemoteVault(sync.serverUrl, sync.authToken);
+        const remoteState = isVaultState(remote.vault?.state) ? remote.vault.state : null;
+
+        if (remoteState) {
+          await writeVaultState(remoteState);
+          await writeSyncState({
+            ...sync,
+            vaultOwnerServerUrl: activeAccount?.serverUrl,
+            vaultOwnerUsername: activeAccount?.username,
+            lastSyncedAt: remoteUpdatedAt,
+            lastLocalChangeAt: remoteUpdatedAt,
+            lastRemoteCheckAt: now,
+            lastSyncError: undefined
+          });
+          return { refreshed: true, state: remoteState };
+        }
+      }
+
+      const emptyState = createEmptyVaultState({ settings: localState.settings });
+      await writeVaultState(emptyState);
+      await writeSyncState({
+        ...sync,
+        vaultOwnerServerUrl: activeAccount?.serverUrl,
+        vaultOwnerUsername: activeAccount?.username,
+        lastSyncedAt: undefined,
+        lastLocalChangeAt: undefined,
+        lastRemoteCheckAt: now,
+        lastSyncError: undefined
+      });
+      return { refreshed: true, state: emptyState };
+    }
 
     const hasUnsyncedLocalChanges =
       typeof sync.lastLocalChangeAt === "number" &&
@@ -267,6 +313,8 @@ async function maybeRefreshVaultFromRemote(options: { force?: boolean } = {}) {
         await writeVaultState(remoteState);
         await writeSyncState({
           ...sync,
+          vaultOwnerServerUrl: activeAccount?.serverUrl,
+          vaultOwnerUsername: activeAccount?.username,
           lastSyncedAt: remoteUpdatedAt,
           lastLocalChangeAt: remoteUpdatedAt,
           lastRemoteCheckAt: now,
@@ -335,6 +383,40 @@ function isSameSyncAccount(
   next: { serverUrl: string; username: string }
 ) {
   return sync.serverUrl === next.serverUrl && sync.username === next.username;
+}
+
+function getSyncAccountIdentity(sync: SyncState) {
+  if (!sync.serverUrl || !sync.username) {
+    return null;
+  }
+
+  return {
+    serverUrl: sync.serverUrl,
+    username: sync.username
+  };
+}
+
+function getVaultOwnerIdentity(sync: SyncState) {
+  if (!sync.vaultOwnerServerUrl || !sync.vaultOwnerUsername) {
+    return null;
+  }
+
+  return {
+    serverUrl: sync.vaultOwnerServerUrl,
+    username: sync.vaultOwnerUsername
+  };
+}
+
+function isSameAccountIdentity(
+  left: { serverUrl: string; username: string } | null,
+  right: { serverUrl: string; username: string } | null
+) {
+  return Boolean(
+    left &&
+      right &&
+      left.serverUrl === right.serverUrl &&
+      left.username === right.username
+  );
 }
 
 async function getCapturedCredentialForSite(site: SiteInfo | null) {
@@ -768,15 +850,18 @@ async function connectSyncAccount(payload: SyncCredentialsInput): Promise<ApiRes
     const remoteState = isVaultState(remote.vault?.state) ? remote.vault.state : null;
     const remoteVaultExists = Boolean(remoteState?.meta);
     let importedRemoteVault = false;
+    const previousAccount = getVaultOwnerIdentity(previousSync) ?? getSyncAccountIdentity(previousSync);
+    const nextAccount = { serverUrl, username };
     const switchingAccounts =
-      Boolean(previousSync.username && previousSync.serverUrl) &&
-      !isSameSyncAccount(previousSync, { serverUrl, username });
+      Boolean(previousAccount) && !isSameAccountIdentity(previousAccount, nextAccount);
 
     await writeSyncState({
       enabled: payload.enableSync ?? true,
       serverUrl,
       username,
       authToken: auth.token,
+      vaultOwnerServerUrl: previousSync.vaultOwnerServerUrl,
+      vaultOwnerUsername: previousSync.vaultOwnerUsername,
       lastSyncedAt: remote.vault?.updatedAt,
       lastSyncError: undefined
     });
@@ -791,6 +876,8 @@ async function connectSyncAccount(payload: SyncCredentialsInput): Promise<ApiRes
           serverUrl,
           username,
           authToken: auth.token,
+          vaultOwnerServerUrl: serverUrl,
+          vaultOwnerUsername: username,
           lastSyncedAt: remote.vault?.updatedAt,
           lastLocalChangeAt: remote.vault?.updatedAt,
           lastRemoteCheckAt: Date.now(),
@@ -805,6 +892,8 @@ async function connectSyncAccount(payload: SyncCredentialsInput): Promise<ApiRes
           serverUrl,
           username,
           authToken: auth.token,
+          vaultOwnerServerUrl: serverUrl,
+          vaultOwnerUsername: username,
           lastSyncedAt: undefined,
           lastLocalChangeAt: undefined,
           lastRemoteCheckAt: Date.now(),
@@ -818,6 +907,8 @@ async function connectSyncAccount(payload: SyncCredentialsInput): Promise<ApiRes
         serverUrl,
         username,
         authToken: auth.token,
+        vaultOwnerServerUrl: serverUrl,
+        vaultOwnerUsername: username,
         lastSyncedAt: remote.vault?.updatedAt,
         lastLocalChangeAt: remote.vault?.updatedAt,
         lastRemoteCheckAt: Date.now(),
@@ -865,7 +956,14 @@ async function setSyncEnabled(enabled: boolean) {
 }
 
 async function disconnectSyncAccount() {
-  await writeSyncState({ enabled: false });
+  const sync = await readSyncState();
+  await writeSyncState({
+    enabled: false,
+    serverUrl: sync.serverUrl,
+    username: sync.username,
+    vaultOwnerServerUrl: sync.vaultOwnerServerUrl ?? sync.serverUrl,
+    vaultOwnerUsername: sync.vaultOwnerUsername ?? sync.username
+  });
   return ok(toSyncStatus(await readSyncState()));
 }
 
@@ -1012,6 +1110,14 @@ async function reauthenticateVault(masterPassword: string) {
   await persistSession();
 
   return ok(await getVaultStatus(state));
+}
+
+async function resetLocalVault() {
+  lockSession();
+  await writePendingLoginCaptures({});
+  await writeVaultState(createEmptyVaultState());
+  await writeSyncState({ enabled: false });
+  return ok(await getVaultStatus(await readVaultState()));
 }
 
 async function saveCredential(payload: Parameters<typeof validateSaveCredentialInput>[0]) {
@@ -1472,6 +1578,8 @@ async function handleRuntimeMessage(
         lockSession();
         return ok(await getVaultStatus());
       }
+      case "vault.resetLocalVault":
+        return resetLocalVault();
       case "vault.reauthenticate":
         return reauthenticateVault(message.payload.masterPassword);
       case "vault.getPopupData": {
