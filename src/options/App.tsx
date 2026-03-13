@@ -135,6 +135,25 @@ export default function App() {
     void refreshStatusAndData();
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void refreshStatusAndData();
+    }, 15_000);
+
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        void refreshStatusAndData();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, []);
+
   const filteredCredentials = useMemo(() => {
     const query = credentialSearch.trim().toLowerCase();
     if (!query) {
@@ -555,6 +574,10 @@ export default function App() {
         mode="unlock"
         busy={busy}
         error={authError}
+        syncAuthBusy={syncBusy}
+        syncAuthError={syncAuthError}
+        defaultSyncServerUrl={syncStatus?.serverUrl}
+        onSyncAuth={handleSyncAuth}
         onSubmit={(password) => handleAuth("unlock", password)}
       />
     );

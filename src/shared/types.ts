@@ -142,6 +142,8 @@ export type SyncState = {
   username?: string;
   authToken?: string;
   lastSyncedAt?: number;
+  lastLocalChangeAt?: number;
+  lastRemoteCheckAt?: number;
   lastSyncError?: string;
 };
 
@@ -151,6 +153,8 @@ export type SyncStatus = {
   serverUrl?: string;
   username?: string;
   lastSyncedAt?: number;
+  lastLocalChangeAt?: number;
+  lastRemoteCheckAt?: number;
   lastSyncError?: string;
 };
 

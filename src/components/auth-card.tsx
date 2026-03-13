@@ -61,6 +61,14 @@ export function AuthCard({
   }, [mode]);
 
   const logoUrl = chrome.runtime.getURL("aegis-logo.png");
+  const syncSectionTitle =
+    mode === "setup"
+      ? "Synced and already have an account?"
+      : "Need to pull your synced vault first?";
+  const syncSectionDescription =
+    mode === "setup"
+      ? "Sign in to Aegis Sync on this device, then unlock the downloaded vault with your master password."
+      : "Sign in to Aegis Sync before unlocking if this browser has not pulled your latest encrypted vault yet.";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -120,12 +128,12 @@ export function AuthCard({
           </div>
         </CardHeader>
         <CardContent>
-          {mode === "setup" && onSyncAuth ? (
+          {onSyncAuth ? (
             <div className="space-y-4 pb-6">
               <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">Already have an Aegis Sync account?</p>
+                <p className="text-sm font-medium text-foreground">{syncSectionTitle}</p>
                 <p className="text-sm text-muted-foreground">
-                  Sign in first on this device, then unlock the downloaded vault with the same master password.
+                  {syncSectionDescription}
                 </p>
               </div>
               <SyncAccountForm
@@ -137,7 +145,7 @@ export function AuthCard({
               <div className="flex items-center gap-3 pt-1">
                 <div className="h-px flex-1 bg-border" />
                 <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Or create local vault
+                  {mode === "setup" ? "Or create local vault" : "Or unlock local vault"}
                 </span>
                 <div className="h-px flex-1 bg-border" />
               </div>

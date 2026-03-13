@@ -46,6 +46,10 @@ export async function readSyncState(): Promise<SyncState> {
     username: typeof state.username === "string" ? state.username : undefined,
     authToken: typeof state.authToken === "string" ? state.authToken : undefined,
     lastSyncedAt: typeof state.lastSyncedAt === "number" ? state.lastSyncedAt : undefined,
+    lastLocalChangeAt:
+      typeof state.lastLocalChangeAt === "number" ? state.lastLocalChangeAt : undefined,
+    lastRemoteCheckAt:
+      typeof state.lastRemoteCheckAt === "number" ? state.lastRemoteCheckAt : undefined,
     lastSyncError: typeof state.lastSyncError === "string" ? state.lastSyncError : undefined
   };
 }

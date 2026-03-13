@@ -1,5 +1,6 @@
 import {
   LOGIN_CAPTURE_TTL_MS,
+  REMOTE_SYNC_CHECK_INTERVAL_MS,
   SESSION_AUTH_KEY,
   SESSION_CAPTURE_KEY,
   SENSITIVE_AUTH_WINDOW_MS,
@@ -101,6 +102,8 @@ function toSyncStatus(sync: SyncState): SyncStatus {
     serverUrl: sync.serverUrl,
     username: sync.username,
     lastSyncedAt: sync.lastSyncedAt,
+    lastLocalChangeAt: sync.lastLocalChangeAt,
+    lastRemoteCheckAt: sync.lastRemoteCheckAt,
     lastSyncError: sync.lastSyncError
   };
 }
@@ -165,8 +168,13 @@ function touchSession({ sensitive = false } = {}) {
 
 async function maybeSyncVaultState(state: VaultState) {
   const sync = await readSyncState();
+  const changedAt = Date.now();
 
   if (!sync.enabled || !sync.serverUrl || !sync.authToken) {
+    await writeSyncState({
+      ...sync,
+      lastLocalChangeAt: changedAt
+    });
     return { ok: false as const, error: "Sync is not enabled on this device." };
   }
 
@@ -175,7 +183,9 @@ async function maybeSyncVaultState(state: VaultState) {
 
     await writeSyncState({
       ...sync,
+      lastLocalChangeAt: response.updatedAt,
       lastSyncedAt: response.updatedAt,
+      lastRemoteCheckAt: Date.now(),
       lastSyncError: undefined
     });
     return { ok: true as const, updatedAt: response.updatedAt };
@@ -185,6 +195,7 @@ async function maybeSyncVaultState(state: VaultState) {
 
     await writeSyncState({
       ...sync,
+      lastLocalChangeAt: changedAt,
       lastSyncError: message
     });
     return { ok: false as const, error: message };
@@ -196,6 +207,82 @@ async function persistVaultState(state: VaultState, options: { sync?: boolean } 
 
   if (options.sync !== false) {
     await maybeSyncVaultState(state);
+    return;
+  }
+
+  const sync = await readSyncState();
+  await writeSyncState({
+    ...sync,
+    lastLocalChangeAt: Date.now()
+  });
+}
+
+async function maybeRefreshVaultFromRemote(options: { force?: boolean } = {}) {
+  const sync = await readSyncState();
+
+  if (!sync.enabled || !sync.serverUrl || !sync.authToken) {
+    return { refreshed: false, state: await readVaultState() };
+  }
+
+  const now = Date.now();
+  if (
+    !options.force &&
+    sync.lastRemoteCheckAt &&
+    now - sync.lastRemoteCheckAt < REMOTE_SYNC_CHECK_INTERVAL_MS
+  ) {
+    return { refreshed: false, state: await readVaultState() };
+  }
+
+  const localState = await readVaultState();
+
+  try {
+    const remote = await fetchRemoteVault(sync.serverUrl, sync.authToken);
+    const remoteState = isVaultState(remote.vault?.state) ? remote.vault.state : null;
+    const remoteUpdatedAt = remote.vault?.updatedAt;
+
+    const hasUnsyncedLocalChanges =
+      typeof sync.lastLocalChangeAt === "number" &&
+      typeof sync.lastSyncedAt === "number" &&
+      sync.lastLocalChangeAt > sync.lastSyncedAt;
+
+    const shouldImportRemote =
+      Boolean(remoteState) &&
+      (
+        !localState.meta ||
+        isVaultContentEmpty(localState) ||
+        (typeof remoteUpdatedAt === "number" &&
+          (sync.lastSyncedAt === undefined || remoteUpdatedAt > sync.lastSyncedAt) &&
+          !hasUnsyncedLocalChanges)
+      );
+
+    if (shouldImportRemote && remoteState) {
+      await writeVaultState(remoteState);
+      await writeSyncState({
+        ...sync,
+        lastSyncedAt: remoteUpdatedAt,
+        lastLocalChangeAt: remoteUpdatedAt,
+        lastRemoteCheckAt: now,
+        lastSyncError: undefined
+      });
+      return { refreshed: true, state: remoteState };
+    }
+
+    await writeSyncState({
+      ...sync,
+      lastRemoteCheckAt: now,
+      lastSyncError: undefined
+    });
+    return { refreshed: false, state: localState };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Aegis failed to refresh from the sync backend.";
+
+    await writeSyncState({
+      ...sync,
+      lastRemoteCheckAt: now,
+      lastSyncError: message
+    });
+    return { refreshed: false, state: localState };
   }
 }
 
@@ -219,6 +306,10 @@ function sortCredentials(credentials: VaultCredential[]) {
 
 function sortNotes(notes: VaultNote[]) {
   return [...notes].sort((left, right) => right.updatedAt - left.updatedAt);
+}
+
+function isVaultContentEmpty(state: VaultState) {
+  return state.credentials.length === 0 && state.notes.length === 0;
 }
 
 async function getCapturedCredentialForSite(site: SiteInfo | null) {
@@ -386,7 +477,8 @@ async function ensureSessionLoaded(state?: VaultState) {
 }
 
 async function getVaultStatus(state?: VaultState): Promise<VaultStatus> {
-  const currentState = state ?? (await readVaultState());
+  const currentState: VaultState =
+    state ?? (await maybeRefreshVaultFromRemote().then((result) => result.state));
   const settings = normalizeSettings(currentState.settings);
 
   await ensureSessionLoaded(currentState);
@@ -502,9 +594,10 @@ async function getSiteInfo(tabId?: number): Promise<SiteInfo | null> {
 }
 
 async function getPopupData(state: VaultState): Promise<ApiResponse<PopupData>> {
+  const refreshedState = await maybeRefreshVaultFromRemote().then((result) => result.state);
   const site = await getSiteInfo();
-  await ensureSessionLoaded(state);
-  const siteMatches = getMatchingCredentialsForSite(state, site);
+  await ensureSessionLoaded(refreshedState);
+  const siteMatches = getMatchingCredentialsForSite(refreshedState, site);
   const totalMatches = siteMatches.length;
   const pendingCapture = await getCapturedCredentialForSite(site);
   const liveDraft =
@@ -603,7 +696,7 @@ async function getCapturePrompt(
   draftUsername?: string,
   hasDraftPassword?: boolean
 ): Promise<ApiResponse<CapturePromptData>> {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
   const site = await getSiteInfo(tabId);
   const capture = await getCapturedCredentialForSite(site);
   await ensureSessionLoaded(state);
@@ -644,7 +737,7 @@ async function connectSyncAccount(payload: SyncCredentialsInput): Promise<ApiRes
       username
     });
 
-    const state = await readVaultState();
+    const state = await maybeRefreshVaultFromRemote({ force: true }).then((result) => result.state);
     const remote = await fetchRemoteVault(serverUrl, auth.token);
     const remoteState = isVaultState(remote.vault?.state) ? remote.vault.state : null;
     const remoteVaultExists = Boolean(remoteState?.meta);
@@ -659,8 +752,18 @@ async function connectSyncAccount(payload: SyncCredentialsInput): Promise<ApiRes
       lastSyncError: undefined
     });
 
-    if (!state.meta && remoteState) {
+    if (remoteState && (!state.meta || isVaultContentEmpty(state))) {
       await persistVaultState(remoteState, { sync: false });
+      await writeSyncState({
+        enabled: payload.enableSync ?? true,
+        serverUrl,
+        username,
+        authToken: auth.token,
+        lastSyncedAt: remote.vault?.updatedAt,
+        lastLocalChangeAt: remote.vault?.updatedAt,
+        lastRemoteCheckAt: Date.now(),
+        lastSyncError: undefined
+      });
       importedRemoteVault = true;
     } else if (state.meta && (payload.enableSync ?? true)) {
       await maybeSyncVaultState(state);
@@ -693,7 +796,7 @@ async function setSyncEnabled(enabled: boolean) {
   await writeSyncState(next);
 
   if (enabled) {
-    const state = await readVaultState();
+    const state = await maybeRefreshVaultFromRemote({ force: true }).then((result) => result.state);
     if (state.meta) {
       await maybeSyncVaultState(state);
     }
@@ -713,7 +816,7 @@ async function syncNow() {
     return fail("VALIDATION_ERROR", "Connect a sync account before syncing.");
   }
 
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote({ force: true }).then((result) => result.state);
   if (!state.meta) {
     return fail("NOT_INITIALIZED", "Initialize or import a vault before syncing.");
   }
@@ -770,7 +873,7 @@ async function savePendingCapture(
 }
 
 async function initializeVault(masterPassword: string) {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote({ force: true }).then((result) => result.state);
 
   if (state.meta) {
     return fail("ALREADY_INITIALIZED", "Vault is already initialized.");
@@ -803,7 +906,7 @@ async function initializeVault(masterPassword: string) {
 }
 
 async function unlockVault(masterPassword: string) {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote({ force: true }).then((result) => result.state);
 
   if (!state.meta) {
     return fail("NOT_INITIALIZED", "Vault has not been initialized.");
@@ -828,7 +931,7 @@ async function unlockVault(masterPassword: string) {
 }
 
 async function reauthenticateVault(masterPassword: string) {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
 
   if (!state.meta) {
     return fail("NOT_INITIALIZED", "Vault has not been initialized.");
@@ -853,7 +956,7 @@ async function reauthenticateVault(masterPassword: string) {
 }
 
 async function saveCredential(payload: Parameters<typeof validateSaveCredentialInput>[0]) {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
   const unlockedError = await requireUnlocked(state);
   if (unlockedError) {
     return unlockedError;
@@ -935,7 +1038,7 @@ async function saveCredential(payload: Parameters<typeof validateSaveCredentialI
 }
 
 async function deleteCredential(credentialId: string) {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
   const unlockedError = await requireUnlocked(state);
   if (unlockedError) {
     return unlockedError;
@@ -959,7 +1062,7 @@ async function deleteCredential(credentialId: string) {
 }
 
 async function listCredentials() {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
   const unlockedError = await requireUnlocked(state);
   if (unlockedError) {
     return unlockedError;
@@ -971,7 +1074,7 @@ async function listCredentials() {
 }
 
 async function fillCredential(credentialId: string, tabId?: number) {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
   const unlockedError = await requireUnlocked(state);
   if (unlockedError) {
     return unlockedError;
@@ -1021,7 +1124,7 @@ async function fillCredential(credentialId: string, tabId?: number) {
 }
 
 async function getCredentialSecret(credentialId: string) {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
   const sensitiveError = await requireSensitiveAccess(state);
   if (sensitiveError) {
     return sensitiveError;
@@ -1042,7 +1145,7 @@ async function getCredentialSecret(credentialId: string) {
 }
 
 async function listNotes() {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
   const unlockedError = await requireUnlocked(state);
   if (unlockedError) {
     return unlockedError;
@@ -1054,7 +1157,7 @@ async function listNotes() {
 }
 
 async function getNoteBody(noteId: string) {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
   const sensitiveError = await requireSensitiveAccess(state);
   if (sensitiveError) {
     return sensitiveError;
@@ -1071,7 +1174,7 @@ async function getNoteBody(noteId: string) {
 }
 
 async function saveNote(payload: Parameters<typeof validateSaveNoteInput>[0]) {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
   const unlockedError = await requireUnlocked(state);
   if (unlockedError) {
     return unlockedError;
@@ -1116,7 +1219,7 @@ async function saveNote(payload: Parameters<typeof validateSaveNoteInput>[0]) {
 }
 
 async function deleteNote(noteId: string) {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
   const unlockedError = await requireUnlocked(state);
   if (unlockedError) {
     return unlockedError;
@@ -1140,7 +1243,7 @@ async function deleteNote(noteId: string) {
 }
 
 async function updateSettings(settings: VaultSettings) {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
   const unlockedError = await requireUnlocked(state);
   if (unlockedError) {
     return unlockedError;
@@ -1158,7 +1261,7 @@ async function updateSettings(settings: VaultSettings) {
 }
 
 async function exportData() {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
   const sensitiveError = await requireSensitiveAccess(state, { forceReauth: true });
   if (sensitiveError) {
     return sensitiveError;
@@ -1205,7 +1308,7 @@ async function exportData() {
 }
 
 async function importData(bundle: VaultExportBundle) {
-  const state = await readVaultState();
+  const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
   const sensitiveError = await requireSensitiveAccess(state, { forceReauth: true });
   if (sensitiveError) {
     return sensitiveError;
@@ -1314,7 +1417,7 @@ async function handleRuntimeMessage(
       case "vault.reauthenticate":
         return reauthenticateVault(message.payload.masterPassword);
       case "vault.getPopupData": {
-        const state = await readVaultState();
+        const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
         return getPopupData(state);
       }
       case "vault.listCredentials":
