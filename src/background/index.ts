@@ -23,6 +23,7 @@ import {
   authenticateSyncAccount
 } from "@/shared/sync";
 import {
+  createEmptyVaultState,
   readSyncState,
   readVaultState,
   writeSyncState,
@@ -327,6 +328,13 @@ function sortNotes(notes: VaultNote[]) {
 
 function isVaultContentEmpty(state: VaultState) {
   return state.credentials.length === 0 && state.notes.length === 0;
+}
+
+function isSameSyncAccount(
+  sync: SyncState,
+  next: { serverUrl: string; username: string }
+) {
+  return sync.serverUrl === next.serverUrl && sync.username === next.username;
 }
 
 async function getCapturedCredentialForSite(site: SiteInfo | null) {
@@ -754,11 +762,15 @@ async function connectSyncAccount(payload: SyncCredentialsInput): Promise<ApiRes
       username
     });
 
+    const previousSync = await readSyncState();
     const state = await maybeRefreshVaultFromRemote({ force: true }).then((result) => result.state);
     const remote = await fetchRemoteVault(serverUrl, auth.token);
     const remoteState = isVaultState(remote.vault?.state) ? remote.vault.state : null;
     const remoteVaultExists = Boolean(remoteState?.meta);
     let importedRemoteVault = false;
+    const switchingAccounts =
+      Boolean(previousSync.username && previousSync.serverUrl) &&
+      !isSameSyncAccount(previousSync, { serverUrl, username });
 
     await writeSyncState({
       enabled: payload.enableSync ?? true,
@@ -769,7 +781,37 @@ async function connectSyncAccount(payload: SyncCredentialsInput): Promise<ApiRes
       lastSyncError: undefined
     });
 
-    if (remoteState && (!state.meta || isVaultContentEmpty(state))) {
+    if (switchingAccounts) {
+      lockSession();
+
+      if (remoteState) {
+        await persistVaultState(remoteState, { sync: false });
+        await writeSyncState({
+          enabled: payload.enableSync ?? true,
+          serverUrl,
+          username,
+          authToken: auth.token,
+          lastSyncedAt: remote.vault?.updatedAt,
+          lastLocalChangeAt: remote.vault?.updatedAt,
+          lastRemoteCheckAt: Date.now(),
+          lastSyncError: undefined
+        });
+        importedRemoteVault = true;
+      } else {
+        const emptyState = createEmptyVaultState({ settings: state.settings });
+        await writeVaultState(emptyState);
+        await writeSyncState({
+          enabled: payload.enableSync ?? true,
+          serverUrl,
+          username,
+          authToken: auth.token,
+          lastSyncedAt: undefined,
+          lastLocalChangeAt: undefined,
+          lastRemoteCheckAt: Date.now(),
+          lastSyncError: undefined
+        });
+      }
+    } else if (remoteState && (!state.meta || isVaultContentEmpty(state))) {
       await persistVaultState(remoteState, { sync: false });
       await writeSyncState({
         enabled: payload.enableSync ?? true,

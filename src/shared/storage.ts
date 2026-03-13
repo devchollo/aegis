@@ -9,6 +9,19 @@ function cloneDefaultState(): VaultState {
   };
 }
 
+export function createEmptyVaultState(
+  overrides?: Partial<Pick<VaultState, "settings">>
+): VaultState {
+  return {
+    credentials: [],
+    notes: [],
+    settings: {
+      ...DEFAULT_SETTINGS,
+      ...(overrides?.settings ?? {})
+    }
+  };
+}
+
 export async function readVaultState(): Promise<VaultState> {
   const raw = await chrome.storage.local.get(STORAGE_KEY);
   const state = raw[STORAGE_KEY] as Partial<VaultState> | undefined;
