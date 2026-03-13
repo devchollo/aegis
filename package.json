@@ -7,7 +7,7 @@
     "dev": "vite build --watch --mode development",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "sync:server": "node sync-server/server.mjs"
+    "sync:server": "npm --prefix sync-server run dev"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.4",

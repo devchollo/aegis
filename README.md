@@ -26,9 +26,10 @@ vault-extension/
 |- popup.html
 |- postcss.config.js
 |- README.md
-|- render.yaml
 |- sync-server/
 |  |- README.md
+|  |- package.json
+|  |- schema.sql
 |  `- server.mjs
 |- tailwind.config.ts
 |- tsconfig.json
@@ -105,17 +106,20 @@ vault-extension/
 Run the included sync server locally:
 
 ```bash
-npm run sync:server
+cd sync-server
+npm install
+npm run dev
 ```
 
 Then use `http://localhost:3000` as the sync server URL inside Aegis.
 
-For Render deployment:
+For manual Render deployment without Blueprints:
 
-- deploy the root repo with [render.yaml](./render.yaml)
-- attach a persistent disk
-- use your deployed service URL, for example `https://aegis-sync.onrender.com`
-- connect that account from the Aegis setup screen or the dashboard Security tab
+- create a Render PostgreSQL instance
+- create a normal Render Web Service
+- set the web service root directory to `sync-server`
+- set `DATABASE_URL` from the Render Postgres instance
+- follow the full guide in [sync-server/README.md](./sync-server/README.md)
 
 ## Development
 
