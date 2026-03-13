@@ -1,0 +1,58 @@
+{
+  "manifest_version": 3,
+  "name": "Aegis",
+  "description": "A secure local vault for credentials and encrypted notes.",
+  "version": "1.0.0",
+  "icons": {
+    "16": "aegis-logo.png",
+    "32": "aegis-logo.png",
+    "48": "aegis-logo.png",
+    "128": "aegis-logo.png"
+  },
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Aegis",
+    "default_icon": {
+      "16": "aegis-logo.png",
+      "32": "aegis-logo.png",
+      "48": "aegis-logo.png",
+      "128": "aegis-logo.png"
+    }
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "aegis-logo.png"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
+    }
+  ]
+}

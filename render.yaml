@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: aegis-sync
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: node sync-server/server.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: AEGIS_SYNC_DATA_DIR
+        value: /opt/render/project/data
+      - key: AEGIS_KEEPALIVE_ENABLED
+        value: "true"
+      - key: AEGIS_KEEPALIVE_INTERVAL_MS
+        value: "840000"

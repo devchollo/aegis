@@ -1,0 +1,29 @@
+{
+  "exportedAt": 1773429506987,
+  "state": {
+    "meta": {
+      "authCheckCiphertextB64": "Dpe2BAVBBVylew9CvC8q7v/wbwkzxbVtmdcYeP5PsiqVfJ1d",
+      "authCheckIvB64": "/xFOfIDla31XMLu3",
+      "hash": "SHA-256",
+      "iterations": 310000,
+      "kdf": "PBKDF2",
+      "saltB64": "5BiMZp5plrBlJJqrdk+wzw==",
+      "version": 1
+    },
+    "credentials": [],
+    "notes": [
+      {
+        "bodyCiphertextB64": "qI100JIod9jNkqPk3bu4ZirdGY+knuwI0yPan2Sa/mPJ8BB7ODAUUyIbK3TyZQx0iapP7KvEzizLRZHvttCMvnvUKN8ErWXipzMl2yiwdfhWgKk1pH1dXlNe5fwFrw6VOxGaCGWC8p36pkPJtE6YKOkikhOkyFCv4o6d7oQtm2aeBj28mjeyGNoCQ16T/GeHWUi7aUWDK2jL8Pl/MRkTNOAh5J2K8D97lDha1ujnpYITPi33iDqoSerJryy9p/QcqX/Oli3hNiz1RXyueCy7+W/nUY9awzc6iXPtIDkTj3mTOFg61+7o+mZpei9732gF4JYsuYTDRGB5352mopOleKyG2DEFWpynkc0d6cP2kuJeNMNwU5iiJtmUd3ymi+i3rW85U7h4TZwIkZnVHQiIsiTXHEo5QxPEuFsTYQPh2I/v7HU25913ejRumueXiNNyztk6Di7zxYfBdDxCQ0gFn5MdfF1t15U58G0POHC5dPwD69mEfTFw3TZ0pje2iD+CRQKN2LKVyMUtaQmi0qhMuPTuSiaffX+cC+y+C/4p5fNF44ymEInNpVdJNiM9B972HRgwpXYFXJ51m1xAdffZSA==",
+        "bodyIvB64": "T2cOF95RS4B77OYr",
+        "createdAt": 1773427799869,
+        "id": "efe6c618-9b88-47ec-ad03-094de057e6ad",
+        "title": "EMA - styles and scripts",
+        "updatedAt": 1773427799869
+      }
+    ],
+    "settings": {
+      "autoLockMinutes": 15,
+      "requireReauthForReveal": false
+    }
+  }
+}

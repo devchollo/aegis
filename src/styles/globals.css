@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 197 38% 97%;
+  --foreground: 215 32% 14%;
+  --card: 0 0% 100%;
+  --card-foreground: 215 32% 14%;
+  --primary: 187 78% 28%;
+  --primary-foreground: 180 33% 98%;
+  --secondary: 197 35% 92%;
+  --secondary-foreground: 215 32% 20%;
+  --muted: 197 33% 94%;
+  --muted-foreground: 215 16% 42%;
+  --accent: 38 96% 57%;
+  --accent-foreground: 214 32% 18%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 198 24% 84%;
+  --input: 198 24% 84%;
+  --ring: 187 78% 28%;
+  --radius: 1rem;
+}
+
+.dark {
+  --background: 215 35% 10%;
+  --foreground: 180 20% 96%;
+  --card: 214 34% 14%;
+  --card-foreground: 180 20% 96%;
+  --primary: 175 67% 44%;
+  --primary-foreground: 212 37% 8%;
+  --secondary: 215 28% 19%;
+  --secondary-foreground: 180 20% 96%;
+  --muted: 215 24% 17%;
+  --muted-foreground: 215 16% 74%;
+  --accent: 39 92% 62%;
+  --accent-foreground: 214 32% 14%;
+  --destructive: 0 63% 47%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 216 22% 24%;
+  --input: 216 22% 24%;
+  --ring: 175 67% 44%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply h-full;
+  }
+
+  body {
+    @apply min-h-full bg-background bg-vault-grid bg-vault-grid text-foreground antialiased;
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+}
+
+@layer utilities {
+  .vault-panel {
+    @apply border border-white/50 bg-card/90 shadow-glow backdrop-blur-xl;
+  }
+
+  .vault-heading {
+    @apply font-display tracking-tight text-foreground;
+  }
+}
