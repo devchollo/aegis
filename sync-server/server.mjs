@@ -359,6 +359,31 @@ app.get("/api/vault", authenticateRequest, async (request, response, next) => {
   }
 });
 
+app.get("/api/vault/meta", authenticateRequest, async (request, response, next) => {
+  try {
+    const result = await pool.query(
+      `
+        select extract(epoch from updated_at) * 1000 as updated_at
+        from vaults
+        where user_id = $1
+        limit 1
+      `,
+      [request.user.id]
+    );
+
+    const row = result.rows[0];
+    response.json({
+      vault: row
+        ? {
+            updatedAt: Math.round(Number(row.updated_at))
+          }
+        : null
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.put("/api/vault", authenticateRequest, async (request, response, next) => {
   try {
     if (!isVaultStateLike(request.body?.state)) {

@@ -289,6 +289,34 @@ or:
 }
 ```
 
+### `GET /api/vault/meta`
+
+Header:
+
+```text
+Authorization: Bearer <token>
+```
+
+Response:
+
+```json
+{
+  "vault": {
+    "updatedAt": 1773430000000
+  }
+}
+```
+
+or:
+
+```json
+{
+  "vault": null
+}
+```
+
+The extension uses this lightweight endpoint during polling so it only downloads the full vault when the remote timestamp changed.
+
 ### `PUT /api/vault`
 
 Header:
@@ -334,3 +362,15 @@ But if you deploy on a sleeping/free service:
 - it is not a guaranteed substitute for an always-on paid instance
 
 If you need reliable no-sleep behavior, use a non-free Render instance type.
+
+## Sync Polling Behavior
+
+The extension does not poll every second.
+
+Current behavior:
+- remote checks are throttled to once per 60 seconds
+- the dashboard only runs the timer when sync is enabled, authenticated, and the page is visible
+- the extension first calls `/api/vault/meta`
+- it only calls `/api/vault` when the remote `updatedAt` is newer than the last synced state or the local vault is empty
+
+That keeps the steady-state sync traffic small and avoids repeatedly downloading the full encrypted vault blob.

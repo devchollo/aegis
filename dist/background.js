@@ -14,7 +14,7 @@ var SENSITIVE_AUTH_WINDOW_MS = 5 * 60 * 1e3;
 var MIN_AUTO_LOCK_MINUTES = 1;
 var MAX_AUTO_LOCK_MINUTES = 240;
 var LOGIN_CAPTURE_TTL_MS = 10 * 60 * 1e3;
-var REMOTE_SYNC_CHECK_INTERVAL_MS = 15 * 1e3;
+var REMOTE_SYNC_CHECK_INTERVAL_MS = 60 * 1e3;
 
 // src/shared/crypto.ts
 var encoder = new TextEncoder();
@@ -392,6 +392,14 @@ async function fetchRemoteVault(serverUrl, authToken) {
     authToken
   );
 }
+async function fetchRemoteVaultMeta(serverUrl, authToken) {
+  return request(
+    serverUrl,
+    "/api/vault/meta",
+    { method: "GET" },
+    authToken
+  );
+}
 async function uploadRemoteVault(serverUrl, authToken, state) {
   return request(
     serverUrl,
@@ -588,21 +596,32 @@ async function maybeRefreshVaultFromRemote(options = {}) {
   }
   const localState = await readVaultState();
   try {
-    const remote = await fetchRemoteVault(sync.serverUrl, sync.authToken);
-    const remoteState = isVaultState(remote.vault?.state) ? remote.vault.state : null;
-    const remoteUpdatedAt = remote.vault?.updatedAt;
+    const remoteMeta = await fetchRemoteVaultMeta(sync.serverUrl, sync.authToken);
+    const remoteUpdatedAt = remoteMeta.vault?.updatedAt;
     const hasUnsyncedLocalChanges = typeof sync.lastLocalChangeAt === "number" && typeof sync.lastSyncedAt === "number" && sync.lastLocalChangeAt > sync.lastSyncedAt;
-    const shouldImportRemote = Boolean(remoteState) && (!localState.meta || isVaultContentEmpty(localState) || typeof remoteUpdatedAt === "number" && (sync.lastSyncedAt === void 0 || remoteUpdatedAt > sync.lastSyncedAt) && !hasUnsyncedLocalChanges);
-    if (shouldImportRemote && remoteState) {
-      await writeVaultState(remoteState);
+    const shouldFetchFullRemote = typeof remoteUpdatedAt === "number" && (!localState.meta || isVaultContentEmpty(localState) || (sync.lastSyncedAt === void 0 || remoteUpdatedAt > sync.lastSyncedAt) && !hasUnsyncedLocalChanges);
+    if (shouldFetchFullRemote) {
+      const remote = await fetchRemoteVault(sync.serverUrl, sync.authToken);
+      const remoteState = isVaultState(remote.vault?.state) ? remote.vault.state : null;
+      if (remoteState) {
+        await writeVaultState(remoteState);
+        await writeSyncState({
+          ...sync,
+          lastSyncedAt: remoteUpdatedAt,
+          lastLocalChangeAt: remoteUpdatedAt,
+          lastRemoteCheckAt: now,
+          lastSyncError: void 0
+        });
+        return { refreshed: true, state: remoteState };
+      }
+    }
+    if (!remoteUpdatedAt && (localState.meta || !isVaultContentEmpty(localState))) {
       await writeSyncState({
         ...sync,
-        lastSyncedAt: remoteUpdatedAt,
-        lastLocalChangeAt: remoteUpdatedAt,
         lastRemoteCheckAt: now,
         lastSyncError: void 0
       });
-      return { refreshed: true, state: remoteState };
+      return { refreshed: false, state: localState };
     }
     await writeSyncState({
       ...sync,
@@ -1461,7 +1480,6 @@ async function importData(bundle) {
     settings: normalizeSettings(bundle.settings)
   };
   await persistVaultState(nextState);
-  lockSession();
   return ok(await getVaultStatus(nextState));
 }
 async function handleRuntimeMessage(message, sender) {

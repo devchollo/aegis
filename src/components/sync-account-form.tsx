@@ -1,5 +1,5 @@
-import { Cloud, LogIn, UserPlus } from "lucide-react";
-import { type FormEvent, useMemo, useState } from "react";
+import { Cloud, LogIn, PencilLine, UserPlus } from "lucide-react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import type { SyncCredentialsInput, SyncMode } from "@/shared/types";
 import { validateSyncCredentials } from "@/shared/validators";
@@ -31,7 +31,13 @@ export function SyncAccountForm({
   const [serverUrl, setServerUrl] = useState(defaultServerUrl);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [editingServerUrl, setEditingServerUrl] = useState(!defaultServerUrl);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setServerUrl(defaultServerUrl);
+    setEditingServerUrl(!defaultServerUrl);
+  }, [defaultServerUrl]);
 
   const buttonLabel = useMemo(() => {
     if (submitLabel) {
@@ -93,16 +99,37 @@ export function SyncAccountForm({
         </Tabs>
 
         <div className="grid gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="sync-server-url">Sync server URL</Label>
-            <Input
-              id="sync-server-url"
-              placeholder="https://your-aegis-sync.onrender.com"
-              value={serverUrl}
-              onChange={(event) => setServerUrl(event.target.value)}
-              autoComplete="url"
-            />
-          </div>
+          {editingServerUrl ? (
+            <div className="space-y-2">
+              <Label htmlFor="sync-server-url">Sync server URL</Label>
+              <Input
+                id="sync-server-url"
+                placeholder="https://your-aegis-sync.onrender.com"
+                value={serverUrl}
+                onChange={(event) => setServerUrl(event.target.value)}
+                autoComplete="url"
+              />
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-emerald-300">
+                Connected Server
+              </p>
+              <p className="mt-1 break-all text-sm text-emerald-50">
+                You are connected to server: {serverUrl}
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="mt-2 h-8 px-2 text-emerald-100 hover:bg-emerald-500/10"
+                onClick={() => setEditingServerUrl(true)}
+              >
+                <PencilLine className="h-4 w-4" />
+                Change server URL
+              </Button>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="sync-username">Username</Label>

@@ -3,7 +3,7 @@
   // src/shared/constants.ts
   var SENSITIVE_AUTH_WINDOW_MS = 5 * 60 * 1e3;
   var LOGIN_CAPTURE_TTL_MS = 10 * 60 * 1e3;
-  var REMOTE_SYNC_CHECK_INTERVAL_MS = 15 * 1e3;
+  var REMOTE_SYNC_CHECK_INTERVAL_MS = 60 * 1e3;
 
   // src/shared/messaging.ts
   async function sendRuntimeMessage(message) {

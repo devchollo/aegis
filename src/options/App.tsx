@@ -136,10 +136,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      void refreshStatusAndData();
-    }, 15_000);
-
     const handleVisibility = () => {
       if (!document.hidden) {
         void refreshStatusAndData();
@@ -148,11 +144,23 @@ export default function App() {
 
     document.addEventListener("visibilitychange", handleVisibility);
 
+    if (!syncStatus?.authenticated || !syncStatus.enabled || document.hidden) {
+      return () => {
+        document.removeEventListener("visibilitychange", handleVisibility);
+      };
+    }
+
+    const timer = window.setInterval(() => {
+      if (!document.hidden) {
+        void refreshStatusAndData();
+      }
+    }, 60_000);
+
     return () => {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, []);
+  }, [syncStatus?.authenticated, syncStatus?.enabled]);
 
   const filteredCredentials = useMemo(() => {
     const query = credentialSearch.trim().toLowerCase();
@@ -218,15 +226,29 @@ export default function App() {
       return;
     }
 
+    const unlockResponse = await sendRuntimeMessage({
+      type: "vault.unlock",
+      payload: { masterPassword: payload.password }
+    });
+
     setSyncStatus(response.data.status);
     setSyncDialogOpen(false);
-    setNotice(
-      response.data.importedRemoteVault
-        ? "Encrypted vault downloaded from Aegis Sync. Unlock it with your master password."
-        : response.data.remoteVaultExists
-          ? "Sync account connected. Local vault remains unchanged until you sync from this device."
-          : "Sync account connected. Create or update your local vault and Aegis will upload the encrypted state."
-    );
+
+    if (unlockResponse.ok) {
+      setNotice(
+        response.data.importedRemoteVault
+          ? "Encrypted vault downloaded and unlocked from Aegis Sync."
+          : "Sync account connected and vault unlocked."
+      );
+    } else {
+      setNotice(
+        response.data.importedRemoteVault
+          ? "Encrypted vault downloaded from Aegis Sync. Enter your master password to unlock it."
+          : response.data.remoteVaultExists
+            ? "Sync account connected. Enter your master password to unlock this vault."
+            : "Sync account connected. Create or update your local vault and Aegis will upload the encrypted state."
+      );
+    }
 
     await refreshStatusAndData();
   }

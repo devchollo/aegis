@@ -33,28 +33,42 @@ import type {
   PopupData,
   SaveCredentialInput,
   SaveNoteInput,
+  SyncCredentialsInput,
+  SyncStatus,
   VaultStatus
 } from "@/shared/types";
 
 export default function App() {
   const logoUrl = chrome.runtime.getURL("aegis-logo.png");
   const [status, setStatus] = useState<VaultStatus | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [popupData, setPopupData] = useState<PopupData | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [syncAuthError, setSyncAuthError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [credentialDraft, setCredentialDraft] = useState<Partial<SaveCredentialInput> | null>(null);
 
   async function refresh() {
-    const statusResponse = await sendRuntimeMessage({ type: "vault.getStatus" });
+    const [statusResponse, syncResponse] = await Promise.all([
+      sendRuntimeMessage({ type: "vault.getStatus" }),
+      sendRuntimeMessage({ type: "vault.getSyncStatus" })
+    ]);
+
     if (!statusResponse.ok) {
       setError(statusResponse.error.message);
       return;
     }
 
     setStatus(statusResponse.data);
+
+    if (syncResponse.ok) {
+      setSyncStatus(syncResponse.data);
+    } else {
+      setError(syncResponse.error.message);
+    }
 
     const popupResponse = await sendRuntimeMessage({ type: "vault.getPopupData" });
     if (!popupResponse.ok) {
@@ -92,6 +106,43 @@ export default function App() {
     }
 
     setNotice(mode === "setup" ? "Aegis created." : "Aegis unlocked.");
+    await refresh();
+  }
+
+  async function handleSyncAuth(payload: SyncCredentialsInput) {
+    setBusy(true);
+    setSyncAuthError(null);
+    setError(null);
+
+    const response = await sendRuntimeMessage({
+      type: "vault.connectSyncAccount",
+      payload
+    });
+
+    setBusy(false);
+
+    if (!response.ok) {
+      setSyncAuthError(response.error.message);
+      return;
+    }
+
+    const unlockResponse = await sendRuntimeMessage({
+      type: "vault.unlock",
+      payload: { masterPassword: payload.password }
+    });
+
+    setSyncStatus(response.data.status);
+    setNotice(
+      unlockResponse.ok
+        ? response.data.importedRemoteVault
+          ? "Synced vault downloaded and unlocked."
+          : "Sync account connected and vault unlocked."
+        : response.data.importedRemoteVault
+          ? "Synced vault downloaded. Enter your master password to unlock it."
+          : response.data.remoteVaultExists
+            ? "Sync account connected. Enter your master password to unlock this vault."
+            : "Sync account connected. Your local vault will upload once created or updated."
+    );
     await refresh();
   }
 
@@ -225,6 +276,10 @@ export default function App() {
           compact
           busy={busy}
           error={error}
+          syncAuthBusy={busy}
+          syncAuthError={syncAuthError}
+          defaultSyncServerUrl={syncStatus?.serverUrl}
+          onSyncAuth={handleSyncAuth}
           onSubmit={(password) => handleAuth("setup", password)}
         />
       </div>
@@ -239,12 +294,16 @@ export default function App() {
           compact
           busy={busy}
           error={error}
+          syncAuthBusy={busy}
+          syncAuthError={syncAuthError}
+          defaultSyncServerUrl={syncStatus?.serverUrl}
           hintTitle={popupData?.hasCapturedCredential ? "Recent login captured" : undefined}
           hintDescription={
             popupData?.hasCapturedCredential
               ? `Unlock Aegis to review and save a submitted login for ${popupData.capturedCredentialOrigin ?? "this site"}.`
               : undefined
           }
+          onSyncAuth={handleSyncAuth}
           onSubmit={(password) => handleAuth("unlock", password)}
         />
       </div>

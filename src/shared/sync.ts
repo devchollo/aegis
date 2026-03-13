@@ -9,6 +9,10 @@ type SyncAuthResponse = {
   token: string;
 };
 
+type SyncVaultMetaResponse = {
+  vault: { updatedAt: number } | null;
+};
+
 async function request<T>(
   serverUrl: string,
   path: string,
@@ -59,6 +63,15 @@ export async function fetchRemoteVault(serverUrl: string, authToken: string) {
   return request<{ vault: SyncVaultDocument | null }>(
     serverUrl,
     "/api/vault",
+    { method: "GET" },
+    authToken
+  );
+}
+
+export async function fetchRemoteVaultMeta(serverUrl: string, authToken: string) {
+  return request<SyncVaultMetaResponse>(
+    serverUrl,
+    "/api/vault/meta",
     { method: "GET" },
     authToken
   );
