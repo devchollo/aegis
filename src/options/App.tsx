@@ -246,7 +246,7 @@ export default function App() {
           ? "Encrypted vault downloaded from Aegis Sync. Enter your master password to unlock it."
           : response.data.remoteVaultExists
             ? "Sync account connected. Enter your master password to unlock this vault."
-            : "Sync account connected. Create or update your local vault and Aegis will upload the encrypted state."
+            : "Sync account connected. Create a local vault on this device and Aegis will upload the encrypted state."
       );
     }
 
@@ -606,9 +606,11 @@ export default function App() {
         mode="setup"
         busy={busy}
         error={authError}
+        notice={notice}
         syncAuthBusy={syncBusy}
         syncAuthError={syncAuthError}
         defaultSyncServerUrl={syncStatus?.serverUrl}
+        syncConnectedUsername={syncStatus?.authenticated ? syncStatus.username : undefined}
         onSyncAuth={handleSyncAuth}
         onSubmit={(password) => handleAuth("setup", password)}
       />
@@ -621,9 +623,11 @@ export default function App() {
         mode="unlock"
         busy={busy}
         error={authError}
+        notice={notice}
         syncAuthBusy={syncBusy}
         syncAuthError={syncAuthError}
         defaultSyncServerUrl={syncStatus?.serverUrl}
+        syncConnectedUsername={syncStatus?.authenticated ? syncStatus.username : undefined}
         onSyncAuth={handleSyncAuth}
         onStartFreshLocalVault={handleStartFreshLocalVault}
         onSubmit={(password) => handleAuth("unlock", password)}

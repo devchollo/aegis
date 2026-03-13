@@ -19,12 +19,14 @@ type AuthCardProps = {
   mode: "setup" | "unlock";
   busy: boolean;
   error: string | null;
+  notice?: string | null;
   compact?: boolean;
   hintTitle?: string;
   hintDescription?: string;
   syncAuthBusy?: boolean;
   syncAuthError?: string | null;
   defaultSyncServerUrl?: string;
+  syncConnectedUsername?: string;
   onSyncAuth?: (payload: SyncCredentialsInput) => Promise<void>;
   onStartFreshLocalVault?: () => Promise<void>;
   onSubmit: (password: string) => Promise<void>;
@@ -34,12 +36,14 @@ export function AuthCard({
   mode,
   busy,
   error,
+  notice = null,
   compact = false,
   hintTitle,
   hintDescription,
   syncAuthBusy = false,
   syncAuthError = null,
   defaultSyncServerUrl,
+  syncConnectedUsername,
   onSyncAuth,
   onStartFreshLocalVault,
   onSubmit
@@ -134,6 +138,16 @@ export function AuthCard({
         <CardContent>
           {onSyncAuth ? (
             <div className="space-y-4 pb-6">
+              {syncConnectedUsername && defaultSyncServerUrl ? (
+                <Alert>
+                  <div className="space-y-1">
+                    <p className="font-medium">Sync connected</p>
+                    <p className="text-sm">
+                      Signed in as {syncConnectedUsername} on {defaultSyncServerUrl}.
+                    </p>
+                  </div>
+                </Alert>
+              ) : null}
               <div className="space-y-1">
                 <p className="text-sm font-medium text-foreground">{syncSectionTitle}</p>
                 <p className="text-sm text-muted-foreground">
@@ -202,6 +216,7 @@ export function AuthCard({
             ) : null}
 
             {localError ? <Alert variant="destructive">{localError}</Alert> : null}
+            {notice ? <Alert>{notice}</Alert> : null}
             {error ? <Alert variant="destructive">{error}</Alert> : null}
 
             <Button type="submit" className="w-full" disabled={busy}>

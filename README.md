@@ -1,5 +1,9 @@
 # Aegis
 
+<p align="center">
+  <img src="./aegis-logo.png" alt="Aegis logo" width="120" />
+</p>
+
 Aegis is a Chrome Extension password vault built on Manifest V3. It stores website credentials and secure notes locally, encrypts secrets with a master-password-derived key, and optionally syncs the already-encrypted vault to your own backend.
 
 This repo includes:

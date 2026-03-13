@@ -141,7 +141,7 @@ export default function App() {
           ? "Synced vault downloaded. Enter your master password to unlock it."
           : response.data.remoteVaultExists
             ? "Sync account connected. Enter your master password to unlock this vault."
-            : "Sync account connected. Your local vault will upload once created or updated."
+            : "Sync account connected. Create a local vault on this device and Aegis will sync it afterward."
     );
     await refresh();
   }
@@ -301,9 +301,11 @@ export default function App() {
           compact
           busy={busy}
           error={error}
+          notice={notice}
           syncAuthBusy={busy}
           syncAuthError={syncAuthError}
           defaultSyncServerUrl={syncStatus?.serverUrl}
+          syncConnectedUsername={syncStatus?.authenticated ? syncStatus.username : undefined}
           onSyncAuth={handleSyncAuth}
           onSubmit={(password) => handleAuth("setup", password)}
         />
@@ -319,9 +321,11 @@ export default function App() {
           compact
           busy={busy}
           error={error}
+          notice={notice}
           syncAuthBusy={busy}
           syncAuthError={syncAuthError}
           defaultSyncServerUrl={syncStatus?.serverUrl}
+          syncConnectedUsername={syncStatus?.authenticated ? syncStatus.username : undefined}
           hintTitle={popupData?.hasCapturedCredential ? "Recent login captured" : undefined}
           hintDescription={
             popupData?.hasCapturedCredential

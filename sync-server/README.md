@@ -1,5 +1,9 @@
 # Aegis Sync Server
 
+<p align="center">
+  <img src="../aegis-logo.png" alt="Aegis logo" width="120" />
+</p>
+
 This backend is designed for a normal Render setup without Blueprints.
 
 Stack:
