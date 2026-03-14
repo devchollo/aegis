@@ -341,23 +341,3 @@ The sync account password and the Aegis master password may be the same or diffe
 ### Exported file is plaintext
 
 That is expected. Export is intentionally decrypted after password confirmation.
-
-## Publish and Contribute
-
-If you are making this repo public:
-
-- review permissions in `manifest.json`
-- replace development branding or screenshots as needed
-- verify your deployed sync backend URL and database security
-- document your own hosting defaults if you fork the sync server
-
-Contributions should preserve:
-
-- local-first security
-- typed message contracts
-- no plaintext secret persistence
-- explicit autofill behavior
-
-## License
-
-Add your preferred license before public release if this repository does not already include one.
