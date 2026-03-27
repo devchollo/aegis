@@ -1586,6 +1586,10 @@ async function handleRuntimeMessage(
         const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
         return getPopupData(state);
       }
+      case "vault.openPopup": {
+        await chrome.action.openPopup().catch(() => undefined);
+        return ok({ opened: true });
+      }
       case "vault.listCredentials":
         return listCredentials();
       case "vault.saveCredential":

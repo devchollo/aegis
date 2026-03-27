@@ -314,6 +314,7 @@ function isRuntimeMessage(value) {
     case "vault.getSyncStatus":
     case "vault.disconnectSyncAccount":
     case "vault.syncNow":
+    case "vault.openPopup":
       return true;
     case "vault.captureLoginSubmission":
       return isRecord(value.payload) && hasString(value.payload.username) && hasString(value.payload.password);
@@ -1656,6 +1657,10 @@ async function handleRuntimeMessage(message, sender) {
       case "vault.getPopupData": {
         const state = await maybeRefreshVaultFromRemote().then((result) => result.state);
         return getPopupData(state);
+      }
+      case "vault.openPopup": {
+        await chrome.action.openPopup().catch(() => void 0);
+        return ok({ opened: true });
       }
       case "vault.listCredentials":
         return listCredentials();

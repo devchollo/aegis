@@ -332,7 +332,7 @@
             return;
           }
           if (actionResponse?.error.code === "VAULT_LOCKED") {
-            window.open(chrome.runtime.getURL("options.html"), "_blank", "noopener,noreferrer");
+            void sendRuntimeMessage({ type: "vault.openPopup" }).catch(() => void 0);
             return;
           }
           if (promptRoot) {
@@ -346,7 +346,7 @@
         });
       },
       onUnlock: () => {
-        window.open(chrome.runtime.getURL("options.html"), "_blank", "noopener,noreferrer");
+        void sendRuntimeMessage({ type: "vault.openPopup" }).catch(() => void 0);
       }
     });
   }

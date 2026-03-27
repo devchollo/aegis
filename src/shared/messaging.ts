@@ -43,6 +43,10 @@ export interface RuntimeMessageMap {
     request: { type: "vault.getPopupData" };
     response: PopupData;
   };
+  "vault.openPopup": {
+    request: { type: "vault.openPopup" };
+    response: { opened: boolean };
+  };
   "vault.captureLoginSubmission": {
     request: {
       type: "vault.captureLoginSubmission";
@@ -234,6 +238,7 @@ export function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     case "vault.getSyncStatus":
     case "vault.disconnectSyncAccount":
     case "vault.syncNow":
+    case "vault.openPopup":
       return true;
     case "vault.captureLoginSubmission":
       return (
